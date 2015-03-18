@@ -26,7 +26,10 @@ class Manager(object):
                 raise Conflict("{} of ({} and {})".format(f.id, x, y))
 
     def child_id(self, x, subid):
-        return "{}.{}".format(x.id, subid)
+        if isinstance(x, _Seq):
+            return "{}[].{}".format(x.id, subid)
+        else:
+            return "{}.{}".format(x.id, subid)
 
     def Domain(self, *args, **kwargs):
         return self.domain_factory(self, *args, **kwargs)
@@ -97,7 +100,7 @@ class Manager(object):
     def _add_metadata(self, domain, k, v):
         domain.metadata[k] = v
 
-    def is_seq(self, metadata):
+    def is_seq_metadata(self, metadata):
         return metadata and metadata.get("datatype", "seq")
 
     def is_atom(self, child):
@@ -107,11 +110,7 @@ class Manager(object):
         return hasattr(child, "decompose")
 
     def shortcut(self, id, attributes, metadata=None):
-        if self.is_seq(metadata):
-            domain = self.Seq(id, self.fields_factory(), metadata)
-        else:
-            domain = self.Domain(id, self.fields_factory(), metadata)
-
+        domain = self.Domain(id, self.fields_factory(), metadata)
         for child in attributes:
             if isinstance(child, (list, tuple)):
                 if len(child) < 3:
@@ -128,7 +127,8 @@ class Manager(object):
             else:
                 # id
                 self._add_field(domain, self.Atom(child))
-        return domain
+        # xxx:
+        return self.Seq(id, domain.fields, domain.metadata) if self.is_seq_metadata(domain.metadata) else domain
 
 
 class _Domain(object):
@@ -204,6 +204,15 @@ class _Atom(object):
 
 
 class _Seq(_Domain):
+    def __init__(self, manager, id, fields=None, metadata=None):
+        self.manager = manager
+        self.id = id
+        print(len(fields))
+        assert len(fields) == 1
+        self.fields = fields[0].fields or manager.fields_factory()
+        self.cache = None
+        self.metadata = metadata or fields[0].metadata  # xxx:
+
     def __repr__(self):
         fmt = '<{} id={}[], declared={!r} at {}>'
         return fmt.format(self.__class__.__name__,

@@ -80,10 +80,12 @@ if __name__ == "__main__":
             self.father = father
             self.mother = mother
 
-    from katashiro import Domain, Atom, domain
+    from katashiro import Domain, Atom, domain, Seq
     PersonDomain = Domain("person") + Atom("name", {"doc": "Name"}) + Atom("age", {"doc": "Age"})
     ParentsDomain = domain("parents", [("father", PersonDomain), ("mother", PersonDomain)])
     parents = Parents(Person("foo", 20), Person("bar", 20))
+    family = Domain("family", [Seq("children", [PersonDomain])]) + ParentsDomain
+    print(family)
     wrapper = ModelWrapper(parents, ParentsDomain)
     print("{} - {}".format(wrapper.father.name["doc"], wrapper.father.name))
     print("{} - {}".format(wrapper.father.age["doc"], wrapper.father.age))
