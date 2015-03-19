@@ -101,7 +101,10 @@ class Manager(object):
         domain.metadata[k] = v
 
     def is_seq_metadata(self, metadata):
-        return metadata and metadata.get("datatype", "seq")
+        return metadata and metadata.get("datatype") == "seq"  # xxx:
+
+    def is_seq(self, child):
+        return self.is_seq_metadata(child.metadata)
 
     def is_atom(self, child):
         return not hasattr(child, "fields")
@@ -136,7 +139,6 @@ class _Domain(object):
         self.manager = manager
         self.id = id
         self.fields = fields or manager.fields_factory()
-        self.cache = None
         self.metadata = metadata or {}
 
     def decompose(self):
@@ -207,11 +209,16 @@ class _Seq(_Domain):
     def __init__(self, manager, id, fields=None, metadata=None):
         self.manager = manager
         self.id = id
-        print(len(fields))
         assert len(fields) == 1
-        self.fields = fields[0].fields or manager.fields_factory()
-        self.cache = None
-        self.metadata = metadata or fields[0].metadata  # xxx:
+        self.fields = fields or manager.field_dict()
+        # xxx:
+        if metadata:
+            assert manager.is_seq_metadata(metadata)
+        self.metadata = metadata or {"datatype": "seq"}
+
+    @property
+    def child_domain(self):
+        return self.fields[0]
 
     def __repr__(self):
         fmt = '<{} id={}[], declared={!r} at {}>'
