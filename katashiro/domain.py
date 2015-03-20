@@ -26,8 +26,8 @@ class Manager(object):
                 raise Conflict("{} of ({} and {})".format(f.id, x, y))
 
     def child_id(self, x, subid):
-        if isinstance(x, _Seq):
-            return "{}[].{}".format(x.id, subid)
+        if hasattr(x, "_child_id"):
+            return x._child_id(subid)
         else:
             return "{}.{}".format(x.id, subid)
 
@@ -103,6 +103,10 @@ class Manager(object):
     def is_seq_metadata(self, metadata):
         return metadata and metadata.get("datatype") == "seq"  # xxx:
 
+    def as_seq_metadata(self, metadata):
+        metadata["datatype"] = "seq"  # xxx:
+        return metadata
+
     def is_seq(self, child):
         return self.is_seq_metadata(child.metadata)
 
@@ -134,6 +138,9 @@ class Manager(object):
         return self.Seq(id, domain.fields, domain.metadata) if self.is_seq_metadata(domain.metadata) else domain
 
 
+missing = object()
+
+
 class _Domain(object):
     def __init__(self, manager, id, fields=None, metadata=None):
         self.manager = manager
@@ -159,17 +166,43 @@ class _Domain(object):
     def only(self, ids):
         return self.manager.include(self, lambda d: d.id in ids, deep=False)
 
+    # @reify
+    # def field_dict(self):
+    #     return {f.id: f for f in self.fields}
+
+    # def __getattr__(self, id):
+    #     try:
+    #         return self.field_dict[id]
+    #     except KeyError:
+    #         raise AttributeError(id)
+
+    # def __contains__(self, id):
+    #     return id in self.field_dict
+
     @reify
     def field_dict(self):
-        return {f.id: f for f in self.fields}
+        return {}
 
     def __getattr__(self, id):
         try:
             return self.field_dict[id]
         except KeyError:
-            raise AttributeError(id)
+            for f in self.fields:
+                self.field_dict[f.id] = f
+                if id == f.id:
+                    if hasattr(f, "_swap"):
+                        return f._swap()
+                    return f
+        raise AttributeError(id)
 
     def __contains__(self, id):
+        try:
+            return self.field_dict[id]
+        except KeyError:
+            for f in self.fields:
+                self.field_dict[f.id] = f
+                if id == f.id:
+                    return True
         return id in self.field_dict
 
     def rename(self, **names):
@@ -204,6 +237,12 @@ class _Atom(object):
     def decompose(self):
         return [self], self.metadata.copy()
 
+    def __repr__(self):
+        fmt = '<{} id={}, at {}>'
+        return fmt.format(self.__class__.__name__,
+                          self.id,
+                          hex(id(self)))
+
 
 class _Seq(_Domain):
     def __init__(self, manager, id, fields=None, metadata=None):
@@ -219,6 +258,9 @@ class _Seq(_Domain):
     @property
     def child_domain(self):
         return self.fields[0]
+
+    def _child_id(self, subid):
+        return "{}[].{}".format(self.id, subid.split(".", 1)[1])
 
     def __repr__(self):
         fmt = '<{} id={}[], declared={!r} at {}>'
@@ -280,3 +322,5 @@ if __name__ == "__main__":
     Parents = domain("parents", [("mother", Person), ("father", Person)])
     print(Parents.exclude(lambda d: d.metadata.get("datatype") == Type.datetime))
     print(Parents.rename(mother="M", father="F"))
+    Family = Domain("family", [Parents.mother, Parents.father, Seq("children", [Person])])
+    print(Family.children.person.name)

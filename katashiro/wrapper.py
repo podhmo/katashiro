@@ -5,7 +5,8 @@ from collections import defaultdict
 
 
 class DomainMap(object):
-    def __init__(self):
+    def __init__(self, lookup_factory):
+        self.lookup_factory = Lookup
         self.pool = defaultdict(dict)
 
     def lookup(self, scene=""):
