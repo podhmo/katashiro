@@ -108,7 +108,8 @@ class Manager(object):
         return metadata
 
     def is_seq(self, child):
-        return self.is_seq_metadata(child.metadata)
+        # return self.is_seq_metadata(child.metadata)
+        return isinstance(child, _Seq)
 
     def is_atom(self, child):
         return not hasattr(child, "fields")
@@ -178,7 +179,6 @@ class _Domain(object):
 
     # def __contains__(self, id):
     #     return id in self.field_dict
-
     @reify
     def field_dict(self):
         return {}
@@ -187,23 +187,38 @@ class _Domain(object):
         try:
             return self.field_dict[id]
         except KeyError:
+            if "_finished" in self.__dict__:
+                raise AttributeError(id)
+            matched = None
             for f in self.fields:
+                if hasattr(f, "_swap"):
+                    f = f._swap()
+                    self.field_dict[f.id] = f
                 self.field_dict[f.id] = f
                 if id == f.id:
-                    if hasattr(f, "_swap"):
-                        return f._swap()
-                    return f
+                    matched = f
+            self.__dict__["_finished"] = True
+            if matched is not None:
+                return matched
         raise AttributeError(id)
 
     def __contains__(self, id):
         try:
             return self.field_dict[id]
         except KeyError:
+            if "_finished" in self.__dict__:
+                raise AttributeError(id)
+            matched = False
             for f in self.fields:
+                if hasattr(f, "_swap"):
+                    f = f._swap()
+                    self.field_dict[f.id] = f
                 self.field_dict[f.id] = f
                 if id == f.id:
-                    return True
-        return id in self.field_dict
+                    matched = True
+            self.__dict__["_finished"] = True
+            return matched
+        raise AttributeError(id)
 
     def rename(self, **names):
         return self.manager.rename(self, names)
@@ -293,14 +308,14 @@ class SetManager(Manager):
 
 
 S = Symbol
-default_domain_manager = Manager(_Seq, _Domain, _Atom)
-Domain = default_domain_manager.Domain
-Atom = default_domain_manager.Atom
-Seq = default_domain_manager.Seq
-domain = default_domain_manager.shortcut
-
 
 if __name__ == "__main__":
+    default_domain_manager = Manager(_Seq, _Domain, _Atom)
+    Domain = default_domain_manager.Domain
+    Atom = default_domain_manager.Atom
+    Seq = default_domain_manager.Seq
+    domain = default_domain_manager.shortcut
+
     # print(Domain("Foo") + Atom("x") + Atom("y"))
     # print(Domain("Foo", [(Domain("Left") + Atom("value")), (Domain("Right") + Atom("value"))]))
     # print(Seq("People", [Domain("Person") + Atom("name") + Atom("age")]))

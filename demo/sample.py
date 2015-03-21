@@ -1,122 +1,4 @@
-# -*- coding:utf-8 -*-
-from katashiro.domain import domain, default_domain_manager
-from katashiro.langhelpers import reify
-
-
-class Counter(object):
-    def __init__(self, i):
-        self.i = i
-
-    def __call__(self):
-        v = self.i
-        self.i += 1
-        return v
-
-C = Counter(0)
-
-
-class _Attribute(object):
-    def __init__(self, translator, domain=None, **metadata):
-        self.translator = translator
-        self.domain = domain
-        self._count = C()
-        self.metadata = metadata
-
-
-class _Alias(object):
-    def __init__(self, translator, name, domain_name, metadata):
-        self.translator = translator
-        self.name = name
-        self.domain_name = domain_name
-        self.metadata = metadata
-        self.is_seq = self.translator.manager.is_seq_metadata(metadata)
-
-    @property
-    def id(self):
-        return self.name
-
-    @reify
-    def domain(self):
-        domain = self.translator.domains[self.domain_name]
-        if not self.is_seq:
-            return self.translator.manager.Domain(self.name, *domain.decompose())
-        else:
-            domain = self.translator.manager.Domain(self.domain_name, *domain.decompose())
-            return self.translator.manager.Seq(self.name, [domain], metadata=self.metadata)
-
-    def _swap(self):
-        return self.domain
-
-    def _child_id(self, subid):
-        if self.is_seq:
-            return "{}[].{}".format(self.id, subid.split(".", 1)[1])
-        else:
-            return"{}.{}".format(self.id, subid)
-
-
-class Translator(object):
-    def __init__(self, manager):
-        self.manager = manager
-        self.domains = {}
-
-    def Attribute(self, *args, **kwargs):
-        return _Attribute(self, *args, **kwargs)
-
-    def Seq(self, *args, **kwargs):
-        self.manager.as_seq_metadata(kwargs)
-        return _Attribute(self, *args, **kwargs)
-
-    def is_attribute(self, attribute):
-        return isinstance(attribute, _Attribute)
-
-    def is_atom(self, attribute):
-        return attribute.domain is None
-
-    def is_domain_name(self, attribute):
-        return isinstance(attribute.domain, str)
-
-    def on_attribute(self, name, attribute):
-        if self.is_atom(attribute):
-            return self.on_atom(name, attribute)
-        elif self.is_domain_name(attribute):
-            return self.on_domain_name(name, attribute)
-        else:
-            return self.on_domain(name, attribute)
-
-    def on_domain(self, name, attribute):
-        fields, metadata = attribute.domain.decompose()
-        metadata.update(attribute.metadata)
-        if self.manager.is_seq_metadata(metadata):
-            domain = self.manager.Seq(name, [self.manager.Domain(name, fields, metadata)])
-        else:
-            domain = self.manager.Domain(name, fields, metadata)
-        self.domains[name] = domain
-        return domain
-
-    def on_domain_name(self, name, attribute):
-        domain_name = attribute.domain
-        # attribute.domain = self.domains[domain_name]
-        alias = _Alias(self, name, domain_name, attribute.metadata)
-        self.domains[name] = alias
-        return alias
-
-    def on_atom(self, name, attribute):
-        return self.manager.Atom(name, attribute.metadata)
-
-    def DomainMeta(self, name, bases, attrs):
-        domain = self.manager.Domain(name)
-        self.domains[name] = domain
-        attributes = [(k, v) for k, v in attrs.items() if self.is_attribute(v)]
-        for k, v in sorted(attributes, key=lambda p: p[1]._count):
-            field = self.on_attribute(k, v)
-            self.manager._add_field(domain, field)
-        return domain
-
-
-default_translator = Translator(default_domain_manager)
-Attribute = default_translator.Attribute
-Seq = default_translator.Seq
-DomainMeta = default_translator.DomainMeta
+from katashiro import DomainMeta, Attribute, Sequence, domain
 
 
 class Person(metaclass=DomainMeta):
@@ -130,7 +12,7 @@ print(domain("person", ["name", "age"]))
 class Family(metaclass=DomainMeta):
     father = Attribute(Person)
     mother = Attribute(Person)
-    children = Seq(Person)
+    children = Sequence(Person)
 
 print(Family)
 
@@ -145,38 +27,55 @@ class Even(metaclass=DomainMeta):
     next = Attribute("Odd")
 
 
-class Address(metaclass=DomainMeta):
-    id = Attribute()
-    street = Attribute()
-    city = Attribute()
-    latitude = Attribute()
-    logitude = Attribute()
-    person = Attribute("Person")
+class User(metaclass=DomainMeta):
+    following = Sequence("User")
+    followers = Sequence("User")
 
+print(User.following.User.following.User.following.User.followers)
+print(User)
 
-class Group(metaclass=DomainMeta):
-    identifier = Attribute()
-    leader = Attribute("Person")
-    executive = Seq("Person")
-    members = Seq("Person")
+if __name__ == "__main__":
+    from katashiro.wrapper import DomainMap
 
+    class Person(object):
+        def __init__(self, name, age):
+            self.name = name
+            self.age = age
 
-class Person(metaclass=DomainMeta):
-    id = Attribute()
-    name = Attribute()
-    surname = Attribute()
-    gender = Attribute()
-    birthday = Attribute()
-    age = Attribute()
-    address = Attribute(Address)
+    class Parents(object):
+        def __init__(self, father, mother):
+            self.father = father
+            self.mother = mother
 
+    class Family(object):
+        def __init__(self, father, mother, children):
+            self.father = father
+            self.mother = mother
+            self.children = children
 
-class Account(metaclass=DomainMeta):
-    email = Attribute()
-    enabled = Attribute()
-    created = Attribute()
-    timeout = Attribute()
-    person = Attribute(Person)
+    class PersonDomain(metaclass=DomainMeta):
+        name = Attribute(doc="Name")
+        age = Attribute(doc="Age")
 
-print(Group)
-print(Group.members.Person.name)
+    class ParentsDomain(metaclass=DomainMeta):
+        father = Attribute(PersonDomain)
+        mother = Attribute(PersonDomain)
+
+    class FamilyDomain(metaclass=DomainMeta):
+        father = Attribute(PersonDomain)
+        mother = Attribute(PersonDomain)
+        children = Sequence(PersonDomain)
+
+    dm = DomainMap()
+    lookup = dm.lookup()
+
+    parents = Parents(Person("foo", 20), Person("bar", 20))
+    wrapper = lookup(parents, ParentsDomain)
+    # many to one
+    print("{} - {}".format(wrapper.father.name["doc"], wrapper.father.name))
+    print("{} - {}".format(wrapper.father.age["doc"], wrapper.father.age))
+
+    family = Family(Person("foo", 20), Person("bar", 20), [Person("a", 1), Person("b", 2)])
+    wrapper = lookup(family, FamilyDomain)
+    for child in wrapper.children:
+        print(child.name)

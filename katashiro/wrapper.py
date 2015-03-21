@@ -1,11 +1,12 @@
 # -*- coding:utf-8 -*-
 from katashiro import logger
 from katashiro.domain import S
+from katashiro.lazylist import LazyList
 from collections import defaultdict
 
 
 class DomainMap(object):
-    def __init__(self, lookup_factory):
+    def __init__(self, lookup_factory=None):
         self.lookup_factory = Lookup
         self.pool = defaultdict(dict)
 
@@ -84,7 +85,7 @@ class ModelWrapper(Wrapper):
 class ModelSeqWrapper(Wrapper):
     def __init__(self, lookup, seq, domain):
         self.lookup = lookup
-        self.seq = seq
+        self.seq = LazyList(seq)
         self.domain = domain
         self._children = {}
 
@@ -95,7 +96,7 @@ class ModelSeqWrapper(Wrapper):
     def __getitem__(self, k):
         if isinstance(k, int):
             logger.warn("model seq wrapper: no longer support index access.")
-            return self.get_child_wrapper(self.sec[k])
+            return self.get_child_wrapper(self.seq[k])
         else:
             return super(ModelSeqWrapper, self).__getitem__(k)
 
